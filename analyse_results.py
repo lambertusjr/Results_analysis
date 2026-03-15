@@ -548,8 +548,10 @@ def generate_violin_plots(df):
                 inner="box",
                 order=present,
                 legend=False,
+                cut=0,
             )
             ax.set_title(f"{metric} Distribution \u2014 {ds}")
+            ax.set_ylim(0, 1)
             ax.grid(True, alpha=0.3, axis="y")
             fig.tight_layout()
             fig.savefig(out / f"{ds}_{metric}_violin.png")
