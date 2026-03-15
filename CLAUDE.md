@@ -48,9 +48,9 @@ Results_analysis/
 
 ## Key Metrics
 
-All 10 metrics: accuracy, precision, recall, f1, precision_illicit, recall_illicit, f1_illicit, roc_auc, PRAUC, kappa
+All 11 metrics: accuracy, precision, recall, f1, precision_illicit, recall_illicit, f1_illicit, roc_auc, PRAUC, kappa, MCC
 
-4 focus metrics for detailed analysis: **f1_illicit, PRAUC, roc_auc, kappa**
+5 focus metrics for detailed analysis: **precision_illicit, recall_illicit, f1_illicit, PRAUC, MCC**
 
 ## Code Conventions
 
