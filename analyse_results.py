@@ -16,7 +16,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, matthews_corrcoef
 from scipy import stats
 from itertools import combinations
 import warnings
@@ -53,10 +53,11 @@ METRIC_COLS = [
     "roc_auc",
     "PRAUC",
     "kappa",
+    "MCC",
 ]
 
 # Subset used for focused visualisations (box/violin/heatmap/rank/CD)
-KEY_METRICS = ["f1_illicit", "PRAUC", "roc_auc", "kappa"]
+KEY_METRICS = ["precision_illicit", "recall_illicit", "f1_illicit", "PRAUC", "MCC"]
 
 # Metrics shown on radar charts
 RADAR_METRICS = [
@@ -64,11 +65,31 @@ RADAR_METRICS = [
     "precision_illicit",
     "recall_illicit",
     "f1_illicit",
-    "roc_auc",
-    "kappa",
+    "PRAUC",
+    "MCC",
 ]
 
 N_RUNS = 30  # expected runs per model-dataset combination
+
+# Display names for metrics (removes underscores for headings/titles)
+_DISPLAY_NAMES = {
+    "accuracy": "Accuracy",
+    "precision": "Precision",
+    "precision_illicit": "Precision Illicit",
+    "recall": "Recall",
+    "recall_illicit": "Recall Illicit",
+    "f1": "F1",
+    "f1_illicit": "F1 Illicit",
+    "roc_auc": "ROC AUC",
+    "PRAUC": "PR-AUC",
+    "kappa": "Kappa",
+    "MCC": "MCC",
+}
+
+
+def _display_name(metric):
+    """Return a human-readable display name for a metric."""
+    return _DISPLAY_NAMES.get(metric, metric.replace("_", " ").title())
 
 # ── Toggle individual sections ────────────────────────────────────────────────
 SECTIONS = {
@@ -158,6 +179,18 @@ def load_all_run_metrics():
                 if m is None:
                     continue
                 row = {k: m.get(k, np.nan) for k in METRIC_COLS}
+                # Compute MCC from predictions if not stored
+                if np.isnan(row.get("MCC", np.nan)):
+                    y_true = m.get("y_true")
+                    y_pred = m.get("preds")
+                    if y_true is not None and y_pred is not None:
+                        try:
+                            row["MCC"] = matthews_corrcoef(
+                                np.asarray(y_true).ravel(),
+                                np.asarray(y_pred).ravel(),
+                            )
+                        except Exception:
+                            pass
                 row.update(dataset=ds, model=model, run=run)
                 records.append(row)
     df = pd.DataFrame(records)
@@ -247,9 +280,9 @@ def generate_summary_tables(df):
             for metric in METRIC_COLS:
                 vals = m_df[metric].dropna()
                 if len(vals) > 0:
-                    row[metric] = f"{vals.mean():.4f} ({vals.std():.4f})"
+                    row[_display_name(metric)] = f"{vals.mean():.4f} ({vals.std():.4f})"
                 else:
-                    row[metric] = "N/A"
+                    row[_display_name(metric)] = "N/A"
             rows.append(row)
         pd.DataFrame(rows).to_csv(out / f"{ds}_summary.csv", index=False)
         print(f"  Saved {ds}_summary.csv")
@@ -263,15 +296,16 @@ def generate_summary_tables(df):
                 continue
             row = {"Dataset": ds, "Model": model}
             for metric in METRIC_COLS:
+                dn = _display_name(metric)
                 vals = sub[metric].dropna()
                 if len(vals) > 0:
-                    row[f"{metric}_mean"] = vals.mean()
-                    row[f"{metric}_std"] = vals.std()
-                    row[f"{metric}_display"] = f"{vals.mean():.4f} ({vals.std():.4f})"
+                    row[f"{dn} Mean"] = vals.mean()
+                    row[f"{dn} Std"] = vals.std()
+                    row[f"{dn} Display"] = f"{vals.mean():.4f} ({vals.std():.4f})"
                 else:
-                    row[f"{metric}_mean"] = np.nan
-                    row[f"{metric}_std"] = np.nan
-                    row[f"{metric}_display"] = "N/A"
+                    row[f"{dn} Mean"] = np.nan
+                    row[f"{dn} Std"] = np.nan
+                    row[f"{dn} Display"] = "N/A"
             all_rows.append(row)
     pd.DataFrame(all_rows).to_csv(out / "overall_summary.csv", index=False)
     print("  Saved overall_summary.csv")
@@ -465,7 +499,7 @@ def generate_box_plots(df):
                 patch.set_facecolor(c)
                 patch.set_alpha(0.6)
 
-            ax.set_title(metric)
+            ax.set_title(_display_name(metric))
             ax.set_ylabel("Score")
             ax.tick_params(axis="x", rotation=45)
             ax.grid(True, alpha=0.3, axis="y")
@@ -500,7 +534,7 @@ def generate_heatmaps(df):
             linewidths=0.5,
             linecolor="white",
         )
-        ax.set_title(f"Mean {metric} Across Datasets and Models")
+        ax.set_title(f"Mean {_display_name(metric)} Across Datasets and Models")
         ax.set_ylabel("Dataset")
         ax.set_xlabel("Model")
         fig.tight_layout()
@@ -524,11 +558,12 @@ def generate_violin_plots(df):
         for metric in KEY_METRICS:
             fig, ax = plt.subplots(figsize=(10, 5))
 
+            dn = _display_name(metric)
             rows_for_plot = []
             for model in MODELS:
                 vals = ds_df[ds_df["model"] == model][metric].dropna()
                 for v in vals:
-                    rows_for_plot.append({"Model": model, metric: v})
+                    rows_for_plot.append({"Model": model, dn: v})
 
             if not rows_for_plot:
                 plt.close(fig)
@@ -541,7 +576,7 @@ def generate_violin_plots(df):
             sns.violinplot(
                 data=plot_df,
                 x="Model",
-                y=metric,
+                y=dn,
                 ax=ax,
                 hue="Model",
                 palette=dict(zip(present, palette)),
@@ -550,7 +585,7 @@ def generate_violin_plots(df):
                 legend=False,
                 cut=0,
             )
-            ax.set_title(f"{metric} Distribution \u2014 {ds}")
+            ax.set_title(f"{_display_name(metric)} Distribution \u2014 {ds}")
             ax.set_ylim(0, 1)
             ax.grid(True, alpha=0.3, axis="y")
             fig.tight_layout()
@@ -583,13 +618,13 @@ def run_statistical_tests(df):
         stat, p = stats.friedmanchisquare(*groups)
         friedman_rows.append(
             {
-                "metric": metric,
-                "test_type": "cross_dataset",
-                "chi2": stat,
-                "p_value": p,
-                "significant_0.05": p < 0.05,
-                "n_blocks": pivot.shape[0],
-                "n_models": pivot.shape[1],
+                "Metric": _display_name(metric),
+                "Test Type": "cross_dataset",
+                "Chi2": stat,
+                "P Value": p,
+                "Significant 0.05": p < 0.05,
+                "N Blocks": pivot.shape[0],
+                "N Models": pivot.shape[1],
             }
         )
 
@@ -608,13 +643,13 @@ def run_statistical_tests(df):
             stat, p = stats.friedmanchisquare(*groups)
             friedman_rows.append(
                 {
-                    "metric": metric,
-                    "test_type": f"within_{ds}",
-                    "chi2": stat,
-                    "p_value": p,
-                    "significant_0.05": p < 0.05,
-                    "n_blocks": pivot.shape[0],
-                    "n_models": pivot.shape[1],
+                    "Metric": _display_name(metric),
+                    "Test Type": f"within {ds}",
+                    "Chi2": stat,
+                    "P Value": p,
+                    "Significant 0.05": p < 0.05,
+                    "N Blocks": pivot.shape[0],
+                    "N Models": pivot.shape[1],
                 }
             )
 
@@ -642,15 +677,15 @@ def run_statistical_tests(df):
                     r = 1 - (2 * stat) / (n * (n + 1) / 2)  # rank-biserial
                     wilcox_rows.append(
                         {
-                            "metric": metric,
-                            "model_1": m1,
-                            "model_2": m2,
-                            "statistic": stat,
-                            "p_value": p,
-                            "effect_size_r": r,
-                            "mean_1": v1.mean(),
-                            "mean_2": v2.mean(),
-                            "n_pairs": n,
+                            "Metric": _display_name(metric),
+                            "Model 1": m1,
+                            "Model 2": m2,
+                            "Statistic": stat,
+                            "P Value": p,
+                            "Effect Size R": r,
+                            "Mean 1": v1.mean(),
+                            "Mean 2": v2.mean(),
+                            "N Pairs": n,
                         }
                     )
                 except Exception:
@@ -660,14 +695,14 @@ def run_statistical_tests(df):
             wd = pd.DataFrame(wilcox_rows)
             # Holm-Bonferroni correction
             n_tests = len(wd)
-            sorted_idx = wd["p_value"].argsort()
+            sorted_idx = wd["P Value"].argsort()
             corrected = np.ones(n_tests)
             for rank_i, orig_i in enumerate(sorted_idx):
                 corrected[orig_i] = min(
-                    wd["p_value"].iloc[orig_i] * (n_tests - rank_i), 1.0
+                    wd["P Value"].iloc[orig_i] * (n_tests - rank_i), 1.0
                 )
-            wd["p_value_holm"] = corrected
-            wd["significant_holm_0.05"] = wd["p_value_holm"] < 0.05
+            wd["P Value Holm"] = corrected
+            wd["Significant Holm 0.05"] = wd["P Value Holm"] < 0.05
             wd.to_csv(out / f"wilcoxon_{ds}.csv", index=False)
 
     print("  Saved Wilcoxon test results")
@@ -693,14 +728,14 @@ def run_statistical_tests(df):
             diff = abs(mean_ranks[m1] - mean_ranks[m2])
             nemenyi_rows.append(
                 {
-                    "metric": metric,
-                    "model_1": m1,
-                    "model_2": m2,
-                    "mean_rank_1": mean_ranks[m1],
-                    "mean_rank_2": mean_ranks[m2],
-                    "rank_diff": diff,
-                    "critical_difference": cd,
-                    "significant": diff > cd,
+                    "Metric": _display_name(metric),
+                    "Model 1": m1,
+                    "Model 2": m2,
+                    "Mean Rank 1": mean_ranks[m1],
+                    "Mean Rank 2": mean_ranks[m2],
+                    "Rank Diff": diff,
+                    "Critical Difference": cd,
+                    "Significant": diff > cd,
                 }
             )
 
@@ -724,13 +759,14 @@ def generate_cv_analysis(df):
             sub = df[(df["dataset"] == ds) & (df["model"] == model)]
             if sub.empty:
                 continue
-            row = {"dataset": ds, "model": model}
+            row = {"Dataset": ds, "Model": model}
             for metric in METRIC_COLS:
                 vals = sub[metric].dropna()
+                dn = _display_name(metric)
                 if len(vals) > 1 and vals.mean() != 0:
-                    row[f"{metric}_cv"] = vals.std() / abs(vals.mean()) * 100
+                    row[f"{dn} CV"] = vals.std() / abs(vals.mean()) * 100
                 else:
-                    row[f"{metric}_cv"] = np.nan
+                    row[f"{dn} CV"] = np.nan
             rows.append(row)
 
     cv_df = pd.DataFrame(rows)
@@ -738,10 +774,10 @@ def generate_cv_analysis(df):
 
     # CV heatmaps for key metrics
     for metric in KEY_METRICS:
-        col = f"{metric}_cv"
+        col = f"{_display_name(metric)} CV"
         if col not in cv_df.columns:
             continue
-        pivot = cv_df.pivot(index="dataset", columns="model", values=col)
+        pivot = cv_df.pivot(index="Dataset", columns="Model", values=col)
         pivot = pivot.reindex(index=DATASETS, columns=MODELS)
 
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -755,7 +791,7 @@ def generate_cv_analysis(df):
             linecolor="white",
         )
         ax.set_title(
-            f"Coefficient of Variation (%) \u2014 {metric}\n"
+            f"Coefficient of Variation (%) \u2014 {_display_name(metric)}\n"
             f"(lower = more reproducible)"
         )
         fig.tight_layout()
@@ -798,13 +834,13 @@ def generate_rank_analysis(df):
                 r = run_ranks[model]
                 rows.append(
                     {
-                        "dataset": ds,
-                        "model": model,
-                        "mean_rank": np.mean(r),
-                        "std_rank": np.std(r),
-                        "median_rank": np.median(r),
-                        "best_rank_count": sum(1 for x in r if x == 1),
-                        "n_runs": len(r),
+                        "Dataset": ds,
+                        "Model": model,
+                        "Mean Rank": np.mean(r),
+                        "Std Rank": np.std(r),
+                        "Median Rank": np.median(r),
+                        "Best Rank Count": sum(1 for x in r if x == 1),
+                        "N Runs": len(r),
                     }
                 )
 
@@ -841,7 +877,7 @@ def generate_radar_charts(df):
             ax.fill(angles, values, alpha=0.06, color=c)
 
         ax.set_xticks(angles[:-1])
-        ax.set_xticklabels(RADAR_METRICS, fontsize=8)
+        ax.set_xticklabels([_display_name(m) for m in RADAR_METRICS], fontsize=8)
         ax.set_ylim(0, 1)
         ax.set_title(f"Model Performance Profile \u2014 {ds}", pad=20)
         ax.legend(loc="upper right", bbox_to_anchor=(1.3, 1.1), fontsize=8)
@@ -943,7 +979,7 @@ def generate_critical_difference_diagram(df):
             y = bar_ys[gi % len(bar_ys)]
             ax.plot([lo - 0.05, hi + 0.05], [y, y], "k-", linewidth=3, alpha=0.4)
 
-        ax.set_title(f"Critical Difference Diagram \u2014 {metric}", pad=25)
+        ax.set_title(f"Critical Difference Diagram \u2014 {_display_name(metric)}", pad=25)
         fig.tight_layout()
         fig.savefig(out / f"{metric}_cd_diagram.png", bbox_inches="tight")
         plt.close(fig)
@@ -980,8 +1016,8 @@ def generate_convergence_analysis(df):
                 ax.plot(range(1, len(vals) + 1), cum_mean, label=model, color=c, linewidth=1.5)
 
             ax.set_xlabel("Number of Runs")
-            ax.set_ylabel(f"Cumulative Mean {metric}")
-            ax.set_title(f"Metric Convergence \u2014 {metric} on {ds}")
+            ax.set_ylabel(f"Cumulative Mean {_display_name(metric)}")
+            ax.set_title(f"Metric Convergence \u2014 {_display_name(metric)} on {ds}")
             ax.legend(fontsize=8)
             ax.grid(True, alpha=0.3)
             fig.tight_layout()
