@@ -1,4 +1,4 @@
-dataset,model,mean_rank,std_rank,median_rank,best_rank_count,n_runs
+Dataset,Model,Mean Rank,Std Rank,Median Rank,Best Rank Count,N Runs
 AMLSim,MLP,2.7333333333333334,2.0154955277107964,2.0,8,30
 AMLSim,GCN,4.9,0.9433981132056605,5.0,0,30
 AMLSim,GAT,5.2,1.4922019523732928,6.0,0,30

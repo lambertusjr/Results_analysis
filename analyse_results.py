@@ -93,17 +93,17 @@ def _display_name(metric):
 
 # ── Toggle individual sections ────────────────────────────────────────────────
 SECTIONS = {
-    "summary_tables": True,  # 1  Mean (std) tables per dataset
-    "pr_curves": True,  # 2  PR curves per model-dataset
-    "confusion_matrices": True,  # 3  Confusion matrices
-    "box_plots": True,  # 4  Box plots of metric distributions
-    "heatmap": True,  # 5  Cross-dataset performance heatmap
-    "violin_plots": True,  # 6  Violin plots
-    "statistical_tests": True,  # 7  Friedman + Wilcoxon + Nemenyi
-    "cv_analysis": True,  # 8  Coefficient of variation
-    "rank_analysis": True,  # 9  Rank stability across runs
-    "radar_charts": True,  # 10 Radar / spider charts
-    "critical_difference": True,  # 11 Critical difference diagrams
+    "summary_tables": False,  # 1  Mean (std) tables per dataset
+    "pr_curves": False,  # 2  PR curves per model-dataset
+    "confusion_matrices": False,  # 3  Confusion matrices
+    "box_plots": False,  # 4  Box plots of metric distributions
+    "heatmap": False,  # 5  Cross-dataset performance heatmap
+    "violin_plots": False,  # 6  Violin plots
+    "statistical_tests": False,  # 7  Friedman + Wilcoxon + Nemenyi
+    "cv_analysis": False,  # 8  Coefficient of variation
+    "rank_analysis": False,  # 9  Rank stability across runs
+    "radar_charts": False,  # 10 Radar / spider charts
+    "critical_difference": False,  # 11 Critical difference diagrams
     "convergence": True,  # 12 Metric convergence over runs
 }
 
